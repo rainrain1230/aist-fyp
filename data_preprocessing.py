@@ -1,4 +1,5 @@
 import pandas as pd
+import pandas_ta as ta
 
 symbols = ['AAPL', 'AXP', 'BA', 'CAT', 'CSCO', 'CVX', 'DIS', 'DD', 'GS', 'HD',
            'IBM', 'INTC', 'JNJ', 'JPM', 'KO', 'MCD', 'MMM', 'MRK', 'MSFT', 'NKE',
@@ -12,6 +13,10 @@ for symbol in symbols:
 
     data['daily_return'] = data['adjClose'].pct_change() * 100
     data['daily_return'].fillna(0, inplace=True)
+    data['ema'] = ta.ema(data['adjClose'], length=9)
+    data['rsi'] = ta.rsi(data['adjClose'], length=9)
+
+
     data = data.iloc[:-1]
     output_filename = f'preprocessed_data/{symbol}_preprocessed_data.csv'
     data.to_csv(output_filename, index=False)
