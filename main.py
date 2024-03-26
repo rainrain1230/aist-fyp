@@ -86,7 +86,7 @@ for stock in stocks:
                     profit = sell_price / buy_price - 1
                     portfolio_returns.append(profit)
 
-                genome.fitness = np.mean(portfolio_returns)
+                genome.fitness = sortino_ratio(np.array(portfolio_returns))
 
         def eval_genomes_short(genomes, config):
             for genome_id, genome in genomes:
@@ -111,11 +111,11 @@ for stock in stocks:
                                 buy_price = train_data['adjClose'].iloc[j]
                                 portfolio_returns.append(sell_price / buy_price - 1)
                                 holding_stock = False
-                    if holding_stock == True:
-                        buy_price = train_data['adjClose'].iloc[-1]
-                        portfolio_returns.append(sell_price / buy_price - 1)
+                if holding_stock == True:
+                    buy_price = train_data['adjClose'].iloc[-1]
+                    portfolio_returns.append(sell_price / buy_price - 1)
 
-                genome.fitness = np.mean(portfolio_returns)
+                genome.fitness = sortino_ratio(np.array(portfolio_returns))
     
         p_long = Population(config)
         p_short = Population(config_short)
@@ -124,10 +124,10 @@ for stock in stocks:
         p_long.add_reporter(stats)
         p_short.add_reporter(StdOutReporter(False))
         p_short.add_reporter(stats)
-        winner_long = p_long.run(eval_genomes, 10)
+        winner_long = p_long.run(eval_genomes, 5)
         winner_long_net = FeedForwardNetwork.create(winner_long, config)
 
-        winner_short = p_short.run(eval_genomes_short, 10)
+        winner_short = p_short.run(eval_genomes_short, 5)
         winner_short_net = FeedForwardNetwork.create(winner_short, config)
 
 
@@ -176,7 +176,7 @@ for stock in stocks:
                     print('Short', sell_price, buy_price, sell_price / buy_price, short_capital)
                     holding_short = False
 
-        print(long_capital, short_capital)
+    print(long_capital, short_capital)
 
     columns = ['Type', 'Entry Price', 'Exit Price', 'Profit Factor', 'Capital']
     trade_df = pd.DataFrame(trade_records, columns=columns)
