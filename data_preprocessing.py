@@ -13,8 +13,8 @@ for symbol in symbols:
 
     data['daily_return'] = data['adjClose'].pct_change() * 100
     data['daily_return'].fillna(0, inplace=True)
-    data['ema'] = ta.ema(data['adjClose'], length=9)
-    data['rsi'] = ta.rsi(data['adjClose'], length=9)
+    data['ema'] = ta.ema(data['adjClose'], length=3)
+    data['rsi'] = ta.rsi(data['adjClose'], length=3)
 
 
     data = data.iloc[:-1]

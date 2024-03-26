@@ -14,7 +14,7 @@ from sklearn.preprocessing import MinMaxScaler
 from helper import sortino_ratio
 
 random.seed(9001)
-training_window_size = 60
+training_window_size = 100
 testing_windows_size = 20
 
 stocks = ['AAPL']
@@ -33,6 +33,10 @@ for stock in stocks:
     config = Config(DefaultGenome, DefaultReproduction,
                         DefaultSpeciesSet, DefaultStagnation,
                         'config_neat.ini')
+
+    config_short = Config(DefaultGenome, DefaultReproduction,
+                        DefaultSpeciesSet, DefaultStagnation,
+                        'config_neat_short.ini')
     
     num_long = 0
     num_short = 0
@@ -58,11 +62,11 @@ for stock in stocks:
                 buy_price = 0
                 portfolio_returns = []
 
-                for j in range(5, training_window_size):
+                for j in range(6, training_window_size):
 
-                    thresholds = [int(x*100) for x in net.activate(np.array(train_data['daily_return_minmax'].iloc[j-5:j]))]
+                    thresholds = [int(x*100) for x in net.activate((np.array(train_data['daily_return_minmax'].iloc[j-5:j])*100))]
                     
-                    if thresholds[0] > thresholds[1] or thresholds[0] < 5 or thresholds[1]:
+                    if not (5 <= thresholds[0] <= 95 and thresholds[0] < thresholds[1] <= 95):
                         genome.fitness = 0
                     else:
                         buy_signal = (train_data['rsi'].iloc[j] < thresholds[0]) * 1
@@ -76,12 +80,13 @@ for stock in stocks:
                                 sell_price = train_data['adjClose'].iloc[j]
                                 portfolio_returns.append(sell_price / buy_price - 1)
                                 holding_stock = False
-                    if holding_stock == True:
-                        sell_price = train_data['adjClose'].iloc[-1]
-                        profit = sell_price / buy_price - 1
-                        portfolio_returns.append(profit)
 
-                genome.fitness = sortino_ratio(np.array(portfolio_returns))
+                if holding_stock == True:
+                    sell_price = train_data['adjClose'].iloc[-1]
+                    profit = sell_price / buy_price - 1
+                    portfolio_returns.append(profit)
+
+                genome.fitness = np.mean(portfolio_returns)
 
         def eval_genomes_short(genomes, config):
             for genome_id, genome in genomes:
@@ -90,9 +95,9 @@ for stock in stocks:
                 buy_price = 0
                 portfolio_returns = []
 
-                for j in range(5, training_window_size):
-                    thresholds = [int(x*100) for x in net.activate(np.array(train_data['daily_return_minmax'].iloc[j-5:j]))]
-                    if thresholds[0] > thresholds[1] or thresholds[0] < 5 or thresholds[1]:
+                for j in range(6, training_window_size):
+                    thresholds = [int(x*100) for x in net.activate((np.array(train_data['daily_return_minmax'].iloc[j-5:j])*100))]
+                    if not (5 <= thresholds[0] <= 95 and thresholds[0] < thresholds[1] <= 95):
                         genome.fitness = 0
                     else:
                         buy_signal = (train_data['rsi'].iloc[j] < thresholds[0]) * 1
@@ -110,10 +115,10 @@ for stock in stocks:
                         buy_price = train_data['adjClose'].iloc[-1]
                         portfolio_returns.append(sell_price / buy_price - 1)
 
-                genome.fitness = sortino_ratio(np.array(portfolio_returns))
+                genome.fitness = np.mean(portfolio_returns)
     
         p_long = Population(config)
-        p_short = Population(config)
+        p_short = Population(config_short)
         stats = StatisticsReporter()
         p_long.add_reporter(StdOutReporter(False))
         p_long.add_reporter(stats)
@@ -126,10 +131,10 @@ for stock in stocks:
         winner_short_net = FeedForwardNetwork.create(winner_short, config)
 
 
-        for j in range(5, testing_windows_size):
+        for j in range(6, testing_windows_size):
 
-            optimal_thresholds_long = [int(x*100) for x in winner_long_net.activate(test_data['daily_return_minmax'].iloc[j-5:j].values)]
-            optimal_thresholds_short = [int(x*100) for x in winner_short_net.activate(test_data['daily_return_minmax'].iloc[j-5:j].values)]
+            optimal_thresholds_long = [int(x*100) for x in winner_long_net.activate((test_data['daily_return_minmax'].iloc[j-5:j].values*100))]
+            optimal_thresholds_short = [int(x*100) for x in winner_short_net.activate((test_data['daily_return_minmax'].iloc[j-5:j].values*100))]
 
             buy_signal_long = (train_data['rsi'].iloc[j] < optimal_thresholds_long[0]) * 1
             sell_signal_long = (train_data['rsi'].iloc[j] > optimal_thresholds_long[1]) * -1
@@ -180,7 +185,17 @@ for stock in stocks:
     short_return = short_capital/10000
     total_return = (((long_capital+short_capital)/2000)-1)
 
-    result_all.append([stock, long_return*100, num_long, long_win_num*100/num_long, long_capital, short_return*100, num_short, short_win_num*100/num_short, short_capital, total_return*100])
+    if num_long == 0:
+        long_win_rate = 0
+    else:
+        long_win_rate = long_win_num*100/num_long
+    
+    if num_short == 0:
+        short_win_rate =0
+    else:
+        short_win_rate = short_win_num*100/num_short
+    
+    result_all.append([stock, long_return*100, num_long, long_win_rate, long_capital, short_return*100, num_short, short_win_rate, short_capital, total_return*100])
 
 columns_all = ['Stock', 'long return(%)', 'Num of Long', 'Long win rate(%)', 'Final Capital of Long', 'short return(%)', 'Num of Short', 'Short win rate(%)', 'Final Capital of Short', 'total return(%)']
 result_df = pd.DataFrame(result_all, columns=columns_all)
