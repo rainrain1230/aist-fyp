@@ -8,7 +8,6 @@ from enhanced_neat.reproduction import DefaultReproduction
 from enhanced_neat.species import DefaultSpeciesSet
 from enhanced_neat.stagnation import DefaultStagnation
 import numpy as np
-import pandas_ta as ta
 import random
 from sklearn.preprocessing import MinMaxScaler
 from helper import sortino_ratio
@@ -67,7 +66,7 @@ for stock in stocks:
                     thresholds = [int(x*100) for x in net.activate((np.array(train_data['daily_return_minmax'].iloc[j-5:j])*100))]
                     
                     if not (5 <= thresholds[0] <= 95 and thresholds[0] < thresholds[1] <= 95):
-                        genome.fitness = 0
+                        genome.fitness = 0.00001
                     else:
                         buy_signal = (train_data['rsi'].iloc[j] < thresholds[0]) * 1
                         sell_signal = (train_data['rsi'].iloc[j] > thresholds[1]) * -1
@@ -76,23 +75,23 @@ for stock in stocks:
                             if buy_signal == 1 and not holding_stock:
                                 buy_price = train_data['adjClose'].iloc[j]
                                 holding_stock = True
-                            elif sell_signal == -1 and holding_stock:
-                                sell_price = train_data['adjClose'].iloc[j]
-                                portfolio_returns.append(sell_price / buy_price - 1)
-                                holding_stock = False
+                        elif sell_signal == -1 and holding_stock:
+                            sell_price = train_data['adjClose'].iloc[j]
+                            portfolio_returns.append(sell_price / buy_price - 1)
+                            holding_stock = False
 
                 if holding_stock == True:
                     sell_price = train_data['adjClose'].iloc[-1]
                     profit = sell_price / buy_price - 1
                     portfolio_returns.append(profit)
 
-                genome.fitness = sortino_ratio(np.array(portfolio_returns))
+                genome.fitness = sortino_ratio(portfolio_returns)+0.00001
 
         def eval_genomes_short(genomes, config):
             for genome_id, genome in genomes:
                 net = FeedForwardNetwork.create(genome, config)
                 holding_stock = False
-                buy_price = 0
+                sell_price = 0
                 portfolio_returns = []
 
                 for j in range(6, training_window_size):
@@ -107,15 +106,15 @@ for stock in stocks:
                             if sell_signal == -1 and not holding_stock:
                                 sell_price = train_data['adjClose'].iloc[j]
                                 holding_stock = True
-                            elif buy_signal == 1 and holding_stock:
-                                buy_price = train_data['adjClose'].iloc[j]
-                                portfolio_returns.append(sell_price / buy_price - 1)
-                                holding_stock = False
+                        elif buy_signal == 1 and holding_stock:
+                            buy_price = train_data['adjClose'].iloc[j]
+                            portfolio_returns.append(sell_price / buy_price - 1)
+                            holding_stock = False
                 if holding_stock == True:
                     buy_price = train_data['adjClose'].iloc[-1]
                     portfolio_returns.append(sell_price / buy_price - 1)
 
-                genome.fitness = sortino_ratio(np.array(portfolio_returns))
+                genome.fitness = np.mean(portfolio_returns) + 0.00001
     
         p_long = Population(config)
         p_short = Population(config_short)
@@ -130,7 +129,9 @@ for stock in stocks:
         winner_short = p_short.run(eval_genomes_short, 5)
         winner_short_net = FeedForwardNetwork.create(winner_short, config)
 
-
+        holding_long = False
+        holding_short = False
+        
         for j in range(6, testing_windows_size):
 
             optimal_thresholds_long = [int(x*100) for x in winner_long_net.activate((test_data['daily_return_minmax'].iloc[j-5:j].values*100))]
@@ -139,42 +140,43 @@ for stock in stocks:
             buy_signal_long = (train_data['rsi'].iloc[j] < optimal_thresholds_long[0]) * 1
             sell_signal_long = (train_data['rsi'].iloc[j] > optimal_thresholds_long[1]) * -1
 
-            buy_signal_short = (train_data['rsi'].iloc[j] < optimal_thresholds_long[0]) * 1
-            sell_signal_short = (train_data['rsi'].iloc[j] > optimal_thresholds_long[1]) * -1
+            buy_signal_short = (train_data['rsi'].iloc[j] < optimal_thresholds_short[0]) * 1
+            sell_signal_short = (train_data['rsi'].iloc[j] > optimal_thresholds_short[1]) * -1
 
             if (test_data['adjClose'].iloc[j] > test_data['ema'].iloc[j]):
                 if buy_signal_long == 1 and not holding_long:
-                    buy_price = test_data.iloc[j]['adjClose']
+                    buy_price_long = test_data.iloc[j]['adjClose']
                     holding_long = True
-                elif sell_signal_long == -1 and holding_long:
-                    sell_price = test_data.iloc[j]['adjClose']
-
-                    long_capital *= sell_price / buy_price
-
-                    trade_records.append(['Long', buy_price, sell_price, sell_price / buy_price, long_capital])
-
-                    if (sell_price / buy_price) > 1:
-                        long_win_num += 1
-                    num_long += 1
-                    print('Long', buy_price, sell_price, sell_price / buy_price, long_capital)
-                    holding_long = False
-
             elif(test_data['adjClose'].iloc[j] < test_data['ema'].iloc[j]):
-                if sell_signal_short == 1 and not holding_short:
-                    sell_price = test_data.iloc[j]['adjClose']
+                if sell_signal_short == -1 and not holding_short:
+                    sell_price_short = test_data.iloc[j]['adjClose']
                     holding_short = True
-                elif buy_signal_short == -1 and holding_short:
-                    buy_price = test_data.iloc[j]['adjClose']
 
-                    short_capital *= sell_price / buy_price
+            if sell_signal_long == -1 and holding_long:
+                sell_price = test_data.iloc[j]['adjClose']
 
-                    trade_records.append(['Short', sell_price, buy_price, sell_price / buy_price, short_capital])
+                long_capital *= sell_price / buy_price
 
-                    if (sell_price / buy_price)> 1:
-                        short_win_num += 1
-                    num_short += 1
-                    print('Short', sell_price, buy_price, sell_price / buy_price, short_capital)
-                    holding_short = False
+                trade_records.append(['Long', buy_price, sell_price, sell_price / buy_price, long_capital])
+
+                if (sell_price / buy_price) > 1:
+                    long_win_num += 1
+                num_long += 1
+                print('Long', buy_price, sell_price, sell_price / buy_price, long_capital)
+                holding_long = False
+
+            if buy_signal_short == 1 and holding_short:
+                buy_price = test_data.iloc[j]['adjClose']
+
+                short_capital *= sell_price / buy_price
+
+                trade_records.append(['Short', sell_price, buy_price, sell_price / buy_price, short_capital])
+
+                if (sell_price / buy_price)> 1:
+                    short_win_num += 1
+                num_short += 1
+                print('Short', sell_price, buy_price, sell_price / buy_price, short_capital)
+                holding_short = False
 
     print(long_capital, short_capital)
 
